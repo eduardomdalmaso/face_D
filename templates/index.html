@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner Facial Inteligente</title>
+    <!-- Fonte Premium -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0c10;
+            --bg-secondary: rgba(31, 40, 51, 0.45);
+            --border-glass: rgba(255, 255, 255, 0.08);
+            --accent-glow: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            --accent-success: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
+            --accent-danger: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+            --text-primary: #f5f6f7;
+            --text-muted: #c5c6c7;
+            --neon-blue: #00f2fe;
+            --neon-green: #00ff87;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(0, 242, 254, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(79, 172, 254, 0.05) 0%, transparent 45%);
+            background-attachment: fixed;
+        }
+
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-glass);
+        }
+
+        .logo-section h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: var(--accent-glow);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-section p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 4px;
+        }
+
+        nav {
+            display: flex;
+            gap: 15px;
+        }
+
+        .nav-btn {
+            background: transparent;
+            border: 1px solid var(--border-glass);
+            color: var(--text-muted);
+            padding: 0.6rem 1.2rem;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .nav-btn.active, .nav-btn:hover {
+            color: #fff;
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.3);
+            background: rgba(0, 242, 254, 0.05);
+        }
+
+        /* Glassmorphism Cards */
+        .glass-card {
+            background: var(--bg-secondary);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        /* Main View Layout */
+        .view-content {
+            display: none;
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        .view-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* View: Scanner */
+        .scanner-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 900px) {
+            .scanner-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .webcam-container {
+            position: relative;
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-glass);
+            background: #000;
+            aspect-ratio: 4/3;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #overlayCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+
+        .control-panel {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .btn {
+            border: none;
+            padding: 0.8rem 1.8rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent-glow);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: var(--accent-danger);
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            box-shadow: 0 0 20px rgba(255, 75, 43, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .scanner-details {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .metric-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 1.2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .metric-card h3 {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-card span {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--neon-blue);
+        }
+
+        .detections-list {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 350px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .detection-item {
+            background: rgba(255,255,255,0.03);
+            border-left: 4px solid var(--neon-blue);
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: slideIn 0.3s ease;
+        }
+
+        .detection-item.unidentified {
+            border-left-color: #ff4b2b;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .detection-info h4 {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .detection-info p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .confidence-badge {
+            background: rgba(0, 242, 254, 0.1);
+            color: var(--neon-blue);
+            padding: 0.3rem 0.6rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: 1px solid rgba(0, 242, 254, 0.2);
+        }
+
+        .detection-item.unidentified .confidence-badge {
+            background: rgba(255, 75, 43, 0.1);
+            color: #ff4b2b;
+            border-color: rgba(255, 75, 43, 0.2);
+        }
+
+        /* View: Cadastro */
+        .register-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .form-control {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-glass);
+            border-radius: 8px;
+            padding: 0.8rem 1rem;
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-control:focus {
+            border-color: var(--neon-blue);
+        }
+
+        .photo-picker {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 1.5rem;
+        }
+
+        .picker-box {
+            background: rgba(255,255,255,0.02);
+            border: 2px dashed var(--border-glass);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .picker-box:hover {
+            border-color: var(--neon-blue);
+            background: rgba(0, 242, 254, 0.02);
+        }
+
+        .preview-wrapper {
+            margin-top: 1rem;
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+            border: 1px solid var(--border-glass);
+            aspect-ratio: 4/3;
+        }
+
+        .preview-wrapper img, .preview-wrapper video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* View: Histórico / Lista */
+        .history-table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-glass);
+        }
+
+        th {
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        tr:hover td {
+            background: rgba(255,255,255,0.02);
+        }
+
+        .user-list {
+            margin-top: 2rem;
+        }
+
+        .user-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .user-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 1.2rem;
+            text-align: center;
+            position: relative;
+        }
+
+        .user-card h4 {
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+
+        .user-card p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: transparent;
+            border: none;
+            color: #ff4b2b;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        /* Notifications */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(31, 40, 51, 0.95);
+            border: 1px solid var(--neon-blue);
+            color: #fff;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.2);
+            z-index: 1000;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="logo-section">
+                <h1>📸 Scanner Facial Inteligente</h1>
+                <p>Pipeline híbrido de alta velocidade (YuNet + DeepFace)</p>
+            </div>
+            <nav>
+                <button class="nav-btn active" onclick="switchView('scanner')">Scanner</button>
+                <button class="nav-btn" onclick="switchView('cadastro')">Cadastrar Rosto</button>
+                <button class="nav-btn" onclick="switchView('banco')">Histórico & Usuários</button>
+                <button class="nav-btn" onclick="switchView('revisoes')">Revisões</button>
+            </nav>
+        </header>
+
+        <!-- View: Scanner -->
+        <div id="view-scanner" class="view-content active">
+            <div class="scanner-grid">
+                <!-- Painel da Webcam -->
+                <div class="glass-card">
+                    <div class="webcam-container">
+                        <video id="webcam" autoplay playsinline muted></video>
+                        <canvas id="overlayCanvas"></canvas>
+                    </div>
+                    <div class="control-panel" style="flex-direction: column; align-items: center; gap: 12px; margin-top: 1.5rem;">
+                        <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.25); padding: 5px 15px; border-radius: 25px; border: 1px solid var(--border-glass);">
+                            <label for="detectorSelect" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">Mecanismo Detector:</label>
+                            <select id="detectorSelect" style="width: 210px; padding: 0.3rem 0.8rem; border-radius: 20px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-glass); color:#fff; outline:none; font-size:0.85rem; cursor:pointer;">
+                                <option value="auto">🔄 Automático (Híbrido)</option>
+                                <option value="yunet">⚡ Apenas YuNet (Rápido)</option>
+                                <option value="retinaface">🎯 Apenas RetinaFace (Acurácia)</option>
+                            </select>
+                        </div>
+                        <button id="toggleScanner" class="btn btn-primary" onclick="toggleWebcam()">
+                            <span>▶</span> Ativar Webcam
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Painel de Resultados -->
+                <div class="scanner-details">
+                    <!-- Configurações de Precisão -->
+                    <div class="glass-card">
+                        <h2 style="font-size: 1.3rem; margin-bottom: 1.2rem;">Configurações</h2>
+                        <div class="form-group" style="margin-bottom: 0px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0;">Tolerância (Distância):</label>
+                                <span id="thresholdVal" style="font-size: 0.95rem; font-weight: 700; color: var(--neon-blue);">68%</span>
+                            </div>
+                            <input type="range" id="thresholdSlider" min="0" max="100" value="68" style="width: 100%; cursor: pointer; accent-color: var(--neon-blue);" oninput="updateThresholdValue(this.value)">
+                        </div>
+                    </div>
+
+                    <div class="glass-card">
+                        <h2 style="font-size: 1.3rem; margin-bottom: 1.2rem;">Estatísticas</h2>
+                        <div class="metric-card">
+                            <h3>Faces Detectadas</h3>
+                            <span id="metric-count">0</span>
+                        </div>
+                        <div class="metric-card">
+                            <h3>Inferencia Latência</h3>
+                            <span id="metric-latency">0.00 ms</span>
+                        </div>
+                        <div class="metric-card" style="margin-top: 10px;">
+                            <h3>Detector Ativo</h3>
+                            <span id="metric-detector" style="font-size: 1.1rem; font-weight: 600;">-</span>
+                        </div>
+                    </div>
+
+                    <div class="glass-card" style="flex-grow: 1;">
+                        <h2 style="font-size: 1.4rem; margin-bottom: 1.2rem;">Identificados no Frame</h2>
+                        <div id="detectionsList" class="detections-list">
+                            <div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">
+                                Inicie a webcam para começar o rastreio.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Cadastro -->
+        <div id="view-cadastro" class="view-content">
+            <div class="glass-card register-container">
+                <h2 style="font-size: 1.6rem; margin-bottom: 1.5rem; background: var(--accent-glow); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Registrar Nova Face</h2>
+                
+                <div class="form-group">
+                    <label for="regName">Nome Completo</label>
+                    <input type="text" id="regName" class="form-control" placeholder="Digite o nome da pessoa">
+                </div>
+
+                <div class="form-group">
+                    <label>Escolha o Método de Imagem</label>
+                    <div class="photo-picker">
+                        <div class="picker-box" onclick="startRegisterWebcam()">
+                            <span style="font-size: 2rem;">📷</span>
+                            <span>Tirar Foto pela Webcam</span>
+                        </div>
+                        <div class="picker-box" onclick="document.getElementById('fileInput').click()">
+                            <span style="font-size: 2rem;">📁</span>
+                            <span>Fazer Upload de Foto</span>
+                        </div>
+                    </div>
+                    <input type="file" id="fileInput" style="display: none;" accept="image/*" onchange="handleFileSelect(event)">
+                </div>
+
+                <!-- Captura de Webcam para Cadastro -->
+                <div id="registerCameraWrapper" class="preview-wrapper">
+                    <video id="registerVideo" autoplay playsinline muted></video>
+                </div>
+                <div id="registerControlPanel" style="display: none; margin-top: 1rem; text-align: center;">
+                    <button class="btn btn-primary" onclick="capturePhotoForRegister()">Capturar Snapshot</button>
+                </div>
+
+                <!-- Preview de Foto Carregada / Capturada -->
+                <div id="registerPreviewWrapper" class="preview-wrapper">
+                    <img id="registerPreviewImg" src="" alt="Preview">
+                </div>
+
+                <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 10px;">
+                    <button id="cancelRegister" class="btn btn-danger" onclick="resetRegisterForm()">Cancelar</button>
+                    <button id="submitRegister" class="btn btn-primary" onclick="submitFaceRegistration()">Salvar Cadastro</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Banco de Dados & Histórico -->
+        <div id="view-banco" class="view-content">
+            <!-- Usuários Cadastrados -->
+            <div class="glass-card" style="margin-bottom: 2rem;">
+                <h2 style="font-size: 1.5rem; margin-bottom: 1rem;">Membros Cadastrados</h2>
+                <div id="userGrid" class="user-grid">
+                    <!-- Cards de Usuários -->
+                </div>
+            </div>
+
+            <!-- Tabela de Histórico -->
+            <div class="glass-card">
+                <h2 style="font-size: 1.5rem; margin-bottom: 1rem;">Histórico Recente de Escaneamentos</h2>
+                <div class="history-table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Rostos Detectados</th>
+                                <th>Nomes Identificados</th>
+                                <th>Latência</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <!-- Linhas de Histórico -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Revisões Pendentes (Aprendizado Ativo) -->
+        <div id="view-revisoes" class="view-content">
+            <div class="glass-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <div>
+                        <h2 style="font-size: 1.6rem; background: var(--accent-glow); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Fila de Revisões (Human-in-the-Loop)</h2>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">Aprove ou rejeite faces capturadas com confiança limítrofe para expandir e refinar a base de conhecimento.</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="loadPendingReviews()" style="padding: 0.5rem 1.2rem; font-size: 0.9rem;">🔄 Atualizar Fila</button>
+                </div>
+                
+                <div id="reviewsGrid" class="user-grid">
+                    <!-- Cards de Revisão serão gerados dinamicamente -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de Aprovação de Revisão -->
+        <div id="approveModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 2000; align-items: center; justify-content: center; animation: fadeIn 0.3s ease;">
+            <div class="glass-card" style="width: 100%; max-width: 450px; padding: 2rem;">
+                <h3 style="font-size: 1.4rem; margin-bottom: 1.2rem; background: var(--accent-glow); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Vincular Face</h3>
+                
+                <div style="text-align: center; margin-bottom: 1.5rem;">
+                    <img id="modalReviewImg" src="" style="width: 120px; height: 120px; border-radius: 12px; object-fit: cover; border: 2px solid var(--neon-blue); box-shadow: 0 0 15px rgba(0, 242, 254, 0.3);">
+                    <p id="modalSuggestedLabel" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;">Sugestão: <strong>-</strong></p>
+                </div>
+                
+                <div class="form-group">
+                    <label for="approveUserSelect" style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.95rem;">Vincular a Usuário Existente</label>
+                    <select id="approveUserSelect" class="form-control" onchange="toggleApproveNewUserField(this.value)">
+                        <!-- Preenchido via JS -->
+                    </select>
+                </div>
+                
+                <div class="form-group" id="approveNewUserGroup" style="display: none; margin-top: 1rem;">
+                    <label for="approveNewUserName" style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.95rem;">Nome do Novo Usuário</label>
+                    <input type="text" id="approveNewUserName" class="form-control" placeholder="Digite o nome completo">
+                </div>
+                
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 2rem;">
+                    <button class="btn btn-danger" onclick="closeApproveModal()">Cancelar</button>
+                    <button class="btn btn-primary" onclick="submitApproveReview()">Confirmar & Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // Configurações e Estado Global
+        let activeStream = null;
+        let isScannerActive = false;
+        let scannerInterval = null;
+        let registerStream = null;
+        let capturedBlob = null;
+
+        // Troca de Telas (Tabs)
+        function switchView(viewName) {
+            // Parar webcams ativas ao mudar de tela
+            stopAllWebcams();
+
+            document.querySelectorAll('.view-content').forEach(view => {
+                view.classList.remove('active');
+            });
+            
+            // Ativa o botão correspondente na navbar
+            const navButtons = document.querySelectorAll('nav .nav-btn');
+            navButtons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(viewName)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            document.getElementById(`view-${viewName}`).classList.add('active');
+
+            if (viewName === 'banco') {
+                loadHistoryTable();
+                loadUsersGrid();
+            } else if (viewName === 'revisoes') {
+                loadPendingReviews();
+            }
+        }
+
+        function stopAllWebcams() {
+            isScannerActive = false;
+            clearInterval(scannerInterval);
+            const btn = document.getElementById("toggleScanner");
+            btn.className = "btn btn-primary";
+            btn.innerHTML = "<span>▶</span> Ativar Webcam";
+
+            if (activeStream) {
+                activeStream.getTracks().forEach(track => track.stop());
+                activeStream = null;
+            }
+            if (registerStream) {
+                registerStream.getTracks().forEach(track => track.stop());
+                registerStream = null;
+                document.getElementById('registerCameraWrapper').style.display = 'none';
+                document.getElementById('registerControlPanel').style.display = 'none';
+            }
+            // Limpa canvas
+            const canvas = document.getElementById('overlayCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // --- SCANNER REALTIME ---
+        async function toggleWebcam() {
+            const video = document.getElementById("webcam");
+            const btn = document.getElementById("toggleScanner");
+
+            if (isScannerActive) {
+                stopAllWebcams();
+            } else {
+                try {
+                    activeStream = await navigator.mediaDevices.getUserMedia({
+                        video: { width: 640, height: 480, facingMode: "user" }
+                    });
+                    video.srcObject = activeStream;
+                    isScannerActive = true;
+                    btn.className = "btn btn-danger";
+                    btn.innerHTML = "<span>⏹</span> Desativar Webcam";
+
+                    // Ajusta o canvas de overlay
+                    const canvas = document.getElementById('overlayCanvas');
+                    video.onloadedmetadata = () => {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                    };
+
+                    // Intervalo de captura (a cada 600ms para manter tempo real fluido)
+                    scannerInterval = setInterval(captureAndRecognize, 600);
+                    showToast("Webcam ativada com sucesso!");
+                } catch (err) {
+                    console.error("Erro webcam:", err);
+                    showToast("Não foi possível acessar a webcam.");
+                }
+            }
+        }
+
+        async function captureAndRecognize() {
+            if (!isScannerActive) return;
+
+            const video = document.getElementById("webcam");
+            const canvas = document.getElementById("overlayCanvas");
+            const ctx = canvas.getContext("2d");
+
+            // Cria canvas temporário em memória para extrair base64 do frame
+            const tempCanvas = document.createElement("canvas");
+            tempCanvas.width = video.videoWidth;
+            tempCanvas.height = video.videoHeight;
+            const tempCtx = tempCanvas.getContext("2d");
+            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+            const base64Image = tempCanvas.toDataURL("image/jpeg");
+            const detectorSelect = document.getElementById("detectorSelect");
+            const selectedDetector = detectorSelect ? detectorSelect.value : "auto";
+            const thresholdSlider = document.getElementById("thresholdSlider");
+            const selectedThreshold = thresholdSlider ? parseFloat(thresholdSlider.value) / 100.0 : 0.68;
+
+            try {
+                const response = await fetch("/recognize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                        image_base64: base64Image, 
+                        detector: selectedDetector,
+                        threshold: selectedThreshold
+                    })
+                });
+
+                if (!response.ok) throw new Error("Erro na resposta do servidor");
+                const data = await response.json();
+
+                // Atualizar Métricas
+                document.getElementById("metric-count").innerText = data.faces.length;
+                document.getElementById("metric-latency").innerText = `${data.latency_ms.toFixed(2)} ms`;
+                
+                const activeDetectorName = data.detector_used === "retinaface" ? "🎯 RetinaFace" : "⚡ YuNet";
+                document.getElementById("metric-detector").innerText = activeDetectorName;
+
+                // Renderiza overlays e preenche lista de identificados
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const list = document.getElementById("detectionsList");
+                list.innerHTML = "";
+
+                if (data.faces.length === 0) {
+                    list.innerHTML = `<div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">Nenhum rosto no frame.</div>`;
+                }
+
+                data.faces.forEach(face => {
+                    const box = face.box;
+                    const isUnidentified = face.name === "Desconhecido";
+                    
+                    // Desenha Bounding Box no Canvas
+                    ctx.strokeStyle = isUnidentified ? "#ff4b2b" : "#00ff87";
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(box.x, box.y, box.w, box.h);
+
+                    // Desenha Etiqueta de Texto
+                    ctx.fillStyle = isUnidentified ? "#ff4b2b" : "#00ff87";
+                    ctx.font = "bold 14px 'Outfit', sans-serif";
+                    const label = `${face.name} (Sim: ${(face.confidence * 100).toFixed(0)}%)`;
+                    ctx.fillText(label, box.x, box.y - 10);
+
+                    // Adiciona na lista lateral
+                    const item = document.createElement("div");
+                    item.className = `detection-item ${isUnidentified ? 'unidentified' : ''}`;
+                    item.innerHTML = `
+                        <div class="detection-info">
+                            <h4>${face.name}</h4>
+                            <p>Coord: (${box.x}, ${box.y}) - ${box.w}x${box.h}</p>
+                        </div>
+                        <div class="confidence-badge">
+                            Sim: ${(face.confidence * 100).toFixed(0)}%
+                        </div>
+                    `;
+                    list.appendChild(item);
+                });
+
+            } catch (err) {
+                console.error("Erro reconhecimento:", err);
+            }
+        }
+
+        // --- CADASTRO ---
+        async function startRegisterWebcam() {
+            resetRegisterForm();
+            const cameraWrapper = document.getElementById('registerCameraWrapper');
+            const video = document.getElementById('registerVideo');
+            const controlPanel = document.getElementById('registerControlPanel');
+
+            try {
+                registerStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: "user" }
+                });
+                video.srcObject = registerStream;
+                cameraWrapper.style.display = 'block';
+                controlPanel.style.display = 'block';
+            } catch (err) {
+                console.error(err);
+                showToast("Não foi possível acessar a câmera de cadastro.");
+            }
+        }
+
+        function capturePhotoForRegister() {
+            const video = document.getElementById('registerVideo');
+            const previewWrapper = document.getElementById('registerPreviewWrapper');
+            const previewImg = document.getElementById('registerPreviewImg');
+
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(blob => {
+                capturedBlob = blob;
+                const url = URL.createObjectURL(blob);
+                previewImg.src = url;
+                
+                // Desliga a câmera e exibe o preview estático
+                if (registerStream) {
+                    registerStream.getTracks().forEach(track => track.stop());
+                    registerStream = null;
+                }
+                document.getElementById('registerCameraWrapper').style.display = 'none';
+                document.getElementById('registerControlPanel').style.display = 'none';
+                previewWrapper.style.display = 'block';
+            }, 'image/jpeg');
+        }
+
+        function handleFileSelect(event) {
+            resetRegisterForm();
+            const file = event.target.files[0];
+            if (!file) return;
+
+            capturedBlob = file;
+            const previewWrapper = document.getElementById('registerPreviewWrapper');
+            const previewImg = document.getElementById('registerPreviewImg');
+            
+            previewImg.src = URL.createObjectURL(file);
+            previewWrapper.style.display = 'block';
+        }
+
+        function resetRegisterForm() {
+            capturedBlob = null;
+            if (registerStream) {
+                registerStream.getTracks().forEach(track => track.stop());
+                registerStream = null;
+            }
+            document.getElementById('registerCameraWrapper').style.display = 'none';
+            document.getElementById('registerControlPanel').style.display = 'none';
+            document.getElementById('registerPreviewWrapper').style.display = 'none';
+            document.getElementById('registerPreviewImg').src = "";
+            document.getElementById('regName').value = "";
+            document.getElementById('fileInput').value = "";
+        }
+
+        async function submitFaceRegistration() {
+            const name = document.getElementById('regName').value.trim();
+            if (!name) {
+                showToast("Por favor, digite o nome completo.");
+                return;
+            }
+            if (!capturedBlob) {
+                showToast("Por favor, tire uma foto ou faça upload de um arquivo.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("name", name);
+            formData.append("file", capturedBlob, "face_capture.jpg");
+
+            showToast("Processando face...");
+            try {
+                const response = await fetch("/register", {
+                    method: "POST",
+                    body: formData
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    showToast(data.message);
+                    resetRegisterForm();
+                } else {
+                    showToast(`Erro: ${data.detail}`);
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Erro de rede ao enviar cadastro.");
+            }
+        }
+
+        // --- HISTÓRICO & USUÁRIOS ---
+        async function loadHistoryTable() {
+            try {
+                const response = await fetch("/history");
+                const data = await response.json();
+                const tbody = document.getElementById("historyTableBody");
+                tbody.innerHTML = "";
+
+                if (data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-muted);">Nenhum histórico registrado.</td></tr>`;
+                    return;
+                }
+
+                data.forEach(row => {
+                    const namesStr = row.identified_names.join(", ") || "Nenhum";
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td>${row.timestamp}</td>
+                        <td>${row.faces_detected}</td>
+                        <td>${namesStr}</td>
+                        <td>${row.latency_ms.toFixed(1)} ms</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function loadUsersGrid() {
+            try {
+                const response = await fetch("/users");
+                const data = await response.json();
+                const grid = document.getElementById("userGrid");
+                grid.innerHTML = "";
+
+                if (data.length === 0) {
+                    grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; color: var(--text-muted); padding: 2rem;">Nenhum usuário cadastrado.</div>`;
+                    return;
+                }
+
+                data.forEach(user => {
+                    const card = document.createElement("div");
+                    card.className = "user-card";
+                    card.innerHTML = `
+                        <button class="delete-btn" onclick="deleteUser('${user.name}')">Remover</button>
+                        <img src="${user.image_url}" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid var(--neon-blue); margin: 0 auto 12px auto; display: block; box-shadow: 0 0 15px rgba(0, 242, 254, 0.25);" alt="Face Snapshot">
+                        <h4>${user.name}</h4>
+                        <p style="font-size:0.75rem; color:var(--text-muted); margin-top:5px;">Templates: <span style="color:var(--neon-blue); font-weight:600;">${user.templates_count || 1}</span></p>
+                        <p style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">Último em: ${user.created_at}</p>
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function deleteUser(name) {
+            if (!confirm(`Tem certeza que deseja remover ${name}?`)) return;
+            try {
+                const response = await fetch(`/users/${name}`, { method: "DELETE" });
+                if (response.ok) {
+                    showToast(`Usuário ${name} deletado.`);
+                    loadUsersGrid();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function updateThresholdValue(val) {
+            document.getElementById("thresholdVal").innerText = val + "%";
+        }
+
+        // --- NOTIFICAÇÕES TOAST ---
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            toast.innerText = message;
+            toast.style.display = "block";
+            setTimeout(() => {
+                toast.style.display = "none";
+            }, 3000);
+        }
+
+        // --- APRENDIZADO ATIVO (REVISÕES) ---
+        let currentReviewId = null;
+        let registeredUsersList = [];
+
+        async function loadPendingReviews() {
+            try {
+                const response = await fetch("/reviews");
+                const data = await response.json();
+                const grid = document.getElementById("reviewsGrid");
+                grid.innerHTML = "";
+
+                if (data.length === 0) {
+                    grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; color: var(--text-muted); padding: 2rem;">Fila de revisões vazia. Parabéns, o classificador está calibrado!</div>`;
+                    return;
+                }
+
+                data.forEach(review => {
+                    const card = document.createElement("div");
+                    card.className = "user-card";
+                    card.innerHTML = `
+                        <img src="${review.image_url}" style="width: 100px; height: 100px; border-radius: 12px; object-fit: cover; border: 2px solid var(--border-glass); margin: 0 auto 12px auto; display: block;" alt="Review Face">
+                        <h4 style="font-size:1.1rem; color: #fff;">${review.suggested_name}</h4>
+                        <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Confiança: <span style="color: var(--neon-blue); font-weight:600;">${(review.confidence * 100).toFixed(0)}%</span></p>
+                        <p style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">Capturado em: ${review.created_at}</p>
+                        
+                        <div style="display:flex; gap: 8px; justify-content:center; margin-top:1rem;">
+                            <button class="btn btn-primary" onclick="openApproveModal('${review.id}', '${review.suggested_name}', '${review.image_url}')" style="padding:0.4rem 0.8rem; font-size:0.8rem; border-radius:15px;">Vincular</button>
+                            <button class="btn btn-danger" onclick="rejectReview('${review.id}')" style="padding:0.4rem 0.8rem; font-size:0.8rem; border-radius:15px; background:var(--accent-danger);">Descartar</button>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch (err) {
+                console.error("Erro ao carregar revisões:", err);
+                showToast("Erro ao buscar a fila de revisões.");
+            }
+        }
+
+        async function openApproveModal(reviewId, suggestedName, imageUrl) {
+            currentReviewId = reviewId;
+            document.getElementById("modalReviewImg").src = imageUrl;
+            document.getElementById("modalSuggestedLabel").innerHTML = `Sugestão: <strong>${suggestedName}</strong>`;
+            
+            // Carrega usuários cadastrados para o Select
+            try {
+                const response = await fetch("/users");
+                registeredUsersList = await response.json();
+                
+                const select = document.getElementById("approveUserSelect");
+                select.innerHTML = "";
+                
+                // Opção para criar novo usuário
+                const optNew = document.createElement("option");
+                optNew.value = "_new_";
+                optNew.innerText = "➕ Criar Novo Usuário...";
+                select.appendChild(optNew);
+                
+                // Opções de usuários existentes
+                let foundMatch = false;
+                registeredUsersList.forEach(user => {
+                    const opt = document.createElement("option");
+                    opt.value = user.name;
+                    opt.innerText = user.name;
+                    if (user.name === suggestedName) {
+                        opt.selected = true;
+                        foundMatch = true;
+                    }
+                    select.appendChild(opt);
+                });
+                
+                // Se a sugestão não bater com ninguém, ou se for nova, seleciona "criar novo"
+                if (!foundMatch) {
+                    optNew.selected = true;
+                    document.getElementById("approveNewUserName").value = suggestedName;
+                } else {
+                    document.getElementById("approveNewUserName").value = "";
+                }
+                
+                toggleApproveNewUserField(select.value);
+                
+                document.getElementById("approveModal").style.display = "flex";
+            } catch (err) {
+                console.error(err);
+                showToast("Erro ao listar usuários cadastrados.");
+            }
+        }
+
+        function toggleApproveNewUserField(val) {
+            const newGroup = document.getElementById("approveNewUserGroup");
+            if (val === "_new_") {
+                newGroup.style.display = "block";
+            } else {
+                newGroup.style.display = "none";
+            }
+        }
+
+        function closeApproveModal() {
+            document.getElementById("approveModal").style.display = "none";
+            currentReviewId = null;
+        }
+
+        async function submitApproveReview() {
+            if (!currentReviewId) return;
+            
+            const select = document.getElementById("approveUserSelect");
+            let userName = select.value;
+            
+            if (userName === "_new_") {
+                userName = document.getElementById("approveNewUserName").value.trim();
+            }
+            
+            if (!userName) {
+                showToast("Por favor, selecione ou digite o nome do usuário.");
+                return;
+            }
+            
+            showToast("Aprovando face...");
+            try {
+                const response = await fetch(`/reviews/${currentReviewId}/approve`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ user_name: userName })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    showToast(data.message);
+                    closeApproveModal();
+                    loadPendingReviews();
+                } else {
+                    showToast(`Erro: ${data.detail}`);
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Erro de rede ao aprovar.");
+            }
+        }
+
+        async function rejectReview(reviewId) {
+            if (!confirm("Deseja realmente descartar essa face capturada?")) return;
+            
+            showToast("Descartando...");
+            try {
+                const response = await fetch(`/reviews/${reviewId}/reject`, {
+                    method: "POST"
+                });
+                
+                if (response.ok) {
+                    showToast("Revisão descartada.");
+                    loadPendingReviews();
+                } else {
+                    const data = await response.json();
+                    showToast(`Erro: ${data.detail}`);
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Erro ao descartar.");
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C++ Object files and DLLs
+*.so
+*.dylib
+*.dll
+*.lib
+*.obj
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env
+.env.*
+
+# Conda environment files (if local)
+.conda/
+conda-meta/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Project Data and Downloads (Large models, database, and local images)
+data/models/
+data/deepface/
+data/face_recognition.db
+data/registered/*
+data/pending_review/*
+data/test_images/*
+!data/registered/.gitkeep
+!data/pending_review/.gitkeep
+!data/test_images/.gitkeep
+
+benchmark_output.txt

@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: docker.io/qdrant/qdrant:latest
+    container_name: face-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+  face-app:
+    build: .
+    container_name: face-api-app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_TYPE=qdrant
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    volumes:
+      - ./data:/app/data
+      - ./data/deepface:/root/.deepface
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+volumes:
+  qdrant_storage:
