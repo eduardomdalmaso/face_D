@@ -467,24 +467,67 @@
         <!-- View: Scanner -->
         <div id="view-scanner" class="view-content active">
             <div class="scanner-grid">
-                <!-- Painel da Webcam -->
+                <!-- Painel da Webcam / RTSP -->
                 <div class="glass-card">
                     <div class="webcam-container">
                         <video id="webcam" autoplay playsinline muted></video>
                         <canvas id="overlayCanvas"></canvas>
+                        <video id="rtspVideo" autoplay playsinline muted style="display: none; width: 100%; height: 100%; object-fit: cover;"></video>
                     </div>
                     <div class="control-panel" style="flex-direction: column; align-items: center; gap: 12px; margin-top: 1.5rem;">
+                        <!-- Seletor de Origem de Vídeo -->
                         <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.25); padding: 5px 15px; border-radius: 25px; border: 1px solid var(--border-glass);">
-                            <label for="detectorSelect" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">Mecanismo Detector:</label>
-                            <select id="detectorSelect" style="width: 210px; padding: 0.3rem 0.8rem; border-radius: 20px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-glass); color:#fff; outline:none; font-size:0.85rem; cursor:pointer;">
-                                <option value="auto">🔄 Automático (Híbrido)</option>
-                                <option value="yunet">⚡ Apenas YuNet (Rápido)</option>
-                                <option value="retinaface">🎯 Apenas RetinaFace (Acurácia)</option>
+                            <label for="videoSourceSelect" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">Origem do Vídeo:</label>
+                            <select id="videoSourceSelect" onchange="toggleVideoSource(this.value)" style="width: 210px; padding: 0.3rem 0.8rem; border-radius: 20px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-glass); color:#fff; outline:none; font-size:0.85rem; cursor:pointer;">
+                                <option value="webcam">📷 Webcam Local (Navegador)</option>
+                                <option value="rtsp">🌐 Stream RTSP (Servidor)</option>
                             </select>
                         </div>
-                        <button id="toggleScanner" class="btn btn-primary" onclick="toggleWebcam()">
-                            <span>▶</span> Ativar Webcam
-                        </button>
+                        
+                        <!-- Controles da Webcam -->
+                        <div id="webcamControls" style="display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%;">
+                            <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.25); padding: 5px 15px; border-radius: 25px; border: 1px solid var(--border-glass);">
+                                <label for="detectorSelect" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">Mecanismo Detector:</label>
+                                <select id="detectorSelect" style="width: 210px; padding: 0.3rem 0.8rem; border-radius: 20px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-glass); color:#fff; outline:none; font-size:0.85rem; cursor:pointer;">
+                                    <option value="auto">🔄 Automático (Híbrido)</option>
+                                    <option value="yunet">⚡ Apenas YuNet (Rápido)</option>
+                                    <option value="retinaface">🎯 Apenas RetinaFace (Acurácia)</option>
+                                </select>
+                            </div>
+                            <button id="toggleScanner" class="btn btn-primary" onclick="toggleWebcam()">
+                                <span>▶</span> Ativar Webcam
+                            </button>
+                        </div>
+
+                        <!-- Controles do RTSP -->
+                        <div id="rtspControls" style="display: none; flex-direction: column; align-items: center; gap: 12px; width: 100%;">
+                            <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 400px; background: rgba(0,0,0,0.25); padding: 15px; border-radius: 12px; border: 1px solid var(--border-glass);">
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                        <label for="rtspUrlInput" style="font-size: 0.8rem; color: var(--text-muted); text-align: left; margin-bottom: 0;">URL do Stream RTSP:</label>
+                                        <button onclick="discoverNetworkCameras('rtspUrlInput', 'scannerDiscoverySelect')" style="background: transparent; border: none; color: var(--neon-blue); font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 600; outline: none; padding: 2px 0;">🔍 Buscar na Rede</button>
+                                    </div>
+                                    <select id="scannerDiscoverySelect" onchange="selectDiscoveredCamera(this.value, 'rtspUrlInput')" style="display: none; margin-bottom: 8px; width: 100%; padding: 0.4rem 0.8rem; border-radius: 8px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-glass); color:#fff; outline:none; font-size:0.85rem; cursor:pointer;"></select>
+                                    <input type="text" id="rtspUrlInput" class="form-control" value="rtsp://localhost:8554/live" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
+                                    <label for="rtspDetectorSelect" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0;">Detector:</label>
+                                    <select id="rtspDetectorSelect" style="flex-grow: 1; padding: 0.3rem 0.6rem; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-glass); color:#fff; outline:none; font-size:0.8rem; cursor:pointer;">
+                                        <option value="auto">🔄 Automático (Híbrido)</option>
+                                        <option value="yunet">⚡ Apenas YuNet (Rápido)</option>
+                                        <option value="retinaface">🎯 Apenas RetinaFace (Acurácia)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 10px; justify-content: center; width: 100%;">
+                                <button id="toggleRtsp" class="btn btn-primary" onclick="toggleRtspProcessing()">
+                                    <span>▶</span> Iniciar Processamento RTSP
+                                </button>
+                                <a id="go2rtcLink" href="http://localhost:1984/webrtc.html?src=live" target="_blank" class="btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border-glass);">
+                                    👁️ Ver Raw
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -545,9 +588,13 @@
                     <div class="photo-picker">
                         <div class="picker-box" onclick="startRegisterWebcam()">
                             <span style="font-size: 2rem;">📷</span>
-                            <span>Tirar Foto pela Webcam</span>
+                            <span>Webcam Local</span>
                         </div>
-                        <div class="picker-box" onclick="document.getElementById('fileInput').click()">
+                        <div class="picker-box" onclick="startRegisterRTSP()">
+                            <span style="font-size: 2rem;">🌐</span>
+                            <span>Stream RTSP</span>
+                        </div>
+                        <div class="picker-box" style="grid-column: 1 / -1;" onclick="document.getElementById('fileInput').click()">
                             <span style="font-size: 2rem;">📁</span>
                             <span>Fazer Upload de Foto</span>
                         </div>
@@ -561,6 +608,27 @@
                 </div>
                 <div id="registerControlPanel" style="display: none; margin-top: 1rem; text-align: center;">
                     <button class="btn btn-primary" onclick="capturePhotoForRegister()">Capturar Snapshot</button>
+                </div>
+
+                <!-- Captura do Stream RTSP para Cadastro (Live MJPEG feed) -->
+                <div id="registerRTSPWrapper" class="preview-wrapper" style="display: none; height: auto; aspect-ratio: unset; margin-top: 1rem;">
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; background: rgba(0,0,0,0.25); padding: 15px; border-radius: 12px; border: 1px solid var(--border-glass);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <label for="regRtspUrlInput" style="font-size: 0.85rem; color: var(--text-muted); text-align: left; margin-bottom: 0;">URL do Stream (RTSP ou RTMP):</label>
+                            <button onclick="discoverNetworkCameras('regRtspUrlInput', 'cadastroDiscoverySelect')" style="background: transparent; border: none; color: var(--neon-blue); font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 600; outline: none; padding: 2px 0;">🔍 Buscar na Rede</button>
+                        </div>
+                        <select id="cadastroDiscoverySelect" onchange="selectDiscoveredCamera(this.value, 'regRtspUrlInput')" style="display: none; margin-bottom: 8px; width: 100%; padding: 0.4rem 0.8rem; border-radius: 8px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-glass); color:#fff; outline:none; font-size:0.85rem; cursor:pointer;"></select>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="regRtspUrlInput" class="form-control" value="rtsp://localhost:8554/live" style="flex-grow: 1; padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                            <button id="btnRegRtspConnect" class="btn btn-primary" onclick="connectRegisterRTSP()" style="padding: 0.4rem 1.2rem; font-size: 0.85rem;">Conectar</button>
+                        </div>
+                    </div>
+                    <div class="webcam-container" style="aspect-ratio: 4/3; overflow: hidden; border-radius: 8px;">
+                        <video id="registerRTSPVideo" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover;"></video>
+                    </div>
+                </div>
+                <div id="registerRTSPControlPanel" style="display: none; margin-top: 1rem; text-align: center;">
+                    <button class="btn btn-primary" onclick="capturePhotoFromRTSP()">Capturar Snapshot do Stream</button>
                 </div>
 
                 <!-- Preview de Foto Carregada / Capturada -->
@@ -593,6 +661,7 @@
                         <thead>
                             <tr>
                                 <th>Timestamp</th>
+                                <th>Foto</th>
                                 <th>Rostos Detectados</th>
                                 <th>Nomes Identificados</th>
                                 <th>Latência</th>
@@ -663,11 +732,192 @@
         let scannerInterval = null;
         let registerStream = null;
         let capturedBlob = null;
+        let isRtspActive = false;
+        let rtspStatusInterval = null;
+        let registerRTSPActive = false;
+        let capturedFromRTSP = false;
+        let activePeerConnection = null;
+        let registerPeerConnection = null;
+
+        // Helper para converter base64 para Blob
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], {type: mimeType});
+        }
+
+        async function playWebRTCStream(videoElement, streamName) {
+            closeWebRTCConnection(streamName);
+            console.log(`[WebRTC] Iniciando conexão para o stream: ${streamName}`);
+            
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }]
+            });
+            if (streamName === 'register') {
+                registerPeerConnection = pc;
+            } else {
+                activePeerConnection = pc;
+            }
+
+            pc.addTransceiver('video', { direction: 'recvonly' });
+
+            pc.ontrack = (event) => {
+                console.log("[WebRTC] Stream recebido! Associando ao elemento de vídeo.");
+                videoElement.srcObject = event.streams[0];
+            };
+
+            pc.oniceconnectionstatechange = () => {
+                console.log("[WebRTC] Status ICE:", pc.iceConnectionState);
+            };
+
+            try {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                const response = await fetch("/api/webrtc/negotiate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sdp: offer.sdp, name: streamName })
+                });
+
+                if (!response.ok) {
+                    let errMsg = "Erro desconhecido na negociação";
+                    try {
+                        const errObj = await response.json();
+                        errMsg = errObj.error || errMsg;
+                    } catch (e) {
+                        try {
+                            errMsg = await response.text() || errMsg;
+                        } catch (e2) {}
+                    }
+                    throw new Error(errMsg);
+                }
+
+                const data = await response.json();
+                await pc.setRemoteDescription({
+                    type: 'answer',
+                    sdp: data.sdp
+                });
+                console.log("[WebRTC] Conexão SDP negociada com sucesso!");
+            } catch (err) {
+                console.error("[WebRTC] Erro ao conectar WebRTC:", err);
+                showToast("Erro ao conectar WebRTC: " + err.message);
+                
+                if (err.message.includes("wrong user/pass") || err.message.includes("wrong response on DESCRIBE")) {
+                    setTimeout(() => {
+                        handleWrongCredentials(streamName, videoElement);
+                    }, 500);
+                }
+            }
+        }
+
+        function embedCredentialsInUrl(url, username, password) {
+            // Regex to parse: protocol, optional credentials, host:port, path
+            const regex = /^(rtsp:\/\/|rtmp:\/\/|rtsps:\/\/|rtmps:\/\/)([^@\n]+@)?([^\/\n]+)(.*)$/i;
+            const match = url.match(regex);
+            if (!match) return url;
+            
+            const protocol = match[1];
+            const host = match[3];
+            const path = match[4];
+            
+            // URL encode username and password to handle special characters correctly
+            const encodedUser = encodeURIComponent(username);
+            const encodedPass = encodeURIComponent(password);
+            
+            return `${protocol}${encodedUser}:${encodedPass}@${host}${path}`;
+        }
+
+        function handleWrongCredentials(streamName, videoElement) {
+            const inputId = (streamName === 'register') ? 'regRtspUrlInput' : 'rtspUrlInput';
+            const inputEl = document.getElementById(inputId);
+            if (!inputEl) return;
+            
+            const newRawUrl = prompt("A conexão com a câmera falhou (credenciais incorretas ou caminho de stream inválido).\n\nCorrija a URL completa se necessário:", inputEl.value.trim());
+            if (newRawUrl === null) return; // Cancelou
+            
+            const username = prompt("Digite o usuário da câmera (deixe vazio para usar o que já está na URL):");
+            if (username === null) return; // Cancelou
+            
+            const password = prompt("Digite a senha da câmera (deixe vazio para usar o que já está na URL):");
+            if (password === null) return; // Cancelou
+            
+            let newUrl = newRawUrl;
+            if (username.trim() !== "" || password.trim() !== "") {
+                newUrl = embedCredentialsInUrl(newRawUrl, username.trim(), password.trim());
+            }
+            
+            inputEl.value = newUrl;
+            
+            // Sincroniza com o input do outro tab
+            const otherInputId = (streamName === 'register') ? 'rtspUrlInput' : 'regRtspUrlInput';
+            const otherInputEl = document.getElementById(otherInputId);
+            if (otherInputEl) {
+                otherInputEl.value = newUrl;
+            }
+            
+            showToast("Tentando reconectar com as credenciais atualizadas...");
+            
+            if (streamName === 'register') {
+                connectRegisterRTSP();
+            } else {
+                startRtspProcessingAction();
+            }
+        }
+
+        function closeWebRTCConnection(streamName) {
+            if (streamName === 'register' || !streamName) {
+                if (registerPeerConnection) {
+                    console.log("[WebRTC] Fechando conexão WebRTC de cadastro.");
+                    try {
+                        registerPeerConnection.close();
+                    } catch (e) {}
+                    registerPeerConnection = null;
+                }
+            }
+            if (streamName !== 'register' || !streamName) {
+                if (activePeerConnection) {
+                    console.log("[WebRTC] Fechando conexão WebRTC ativa (scanner).");
+                    try {
+                        activePeerConnection.close();
+                    } catch (e) {}
+                    activePeerConnection = null;
+                }
+            }
+        }
 
         // Troca de Telas (Tabs)
-        function switchView(viewName) {
-            // Parar webcams ativas ao mudar de tela
-            stopAllWebcams();
+        let lastView = 'scanner';
+        async function switchView(viewName) {
+            if (viewName === 'cadastro') {
+                // Parar streams do scanner para usar na tela de cadastro
+                stopAllWebcams();
+                if (isRtspActive) {
+                    await stopRtspProcessingAction();
+                }
+            } else if (viewName === 'scanner') {
+                // Parar streams da tela de cadastro
+                if (registerStream) {
+                    registerStream.getTracks().forEach(track => track.stop());
+                    registerStream = null;
+                    document.getElementById('registerCameraWrapper').style.display = 'none';
+                    document.getElementById('registerControlPanel').style.display = 'none';
+                }
+                closeWebRTCConnection("register");
+                const registerRTSPVideo = document.getElementById('registerRTSPVideo');
+                if (registerRTSPVideo) {
+                    registerRTSPVideo.srcObject = null;
+                }
+                document.getElementById('registerRTSPWrapper').style.display = 'none';
+                document.getElementById('registerRTSPControlPanel').style.display = 'none';
+                registerRTSPActive = false;
+            }
+
+            lastView = viewName;
 
             document.querySelectorAll('.view-content').forEach(view => {
                 view.classList.remove('active');
@@ -695,9 +945,13 @@
         function stopAllWebcams() {
             isScannerActive = false;
             clearInterval(scannerInterval);
+            closeWebRTCConnection();
+
             const btn = document.getElementById("toggleScanner");
-            btn.className = "btn btn-primary";
-            btn.innerHTML = "<span>▶</span> Ativar Webcam";
+            if (btn) {
+                btn.className = "btn btn-primary";
+                btn.innerHTML = "<span>▶</span> Ativar Webcam";
+            }
 
             if (activeStream) {
                 activeStream.getTracks().forEach(track => track.stop());
@@ -709,10 +963,150 @@
                 document.getElementById('registerCameraWrapper').style.display = 'none';
                 document.getElementById('registerControlPanel').style.display = 'none';
             }
+            
+            // Desativa RTSP para cadastro
+            registerRTSPActive = false;
+            document.getElementById('registerRTSPWrapper').style.display = 'none';
+            document.getElementById('registerRTSPControlPanel').style.display = 'none';
+            
+            const registerRTSPVideo = document.getElementById('registerRTSPVideo');
+            if (registerRTSPVideo) {
+                registerRTSPVideo.srcObject = null;
+            }
+            
+            const rtspVideo = document.getElementById('rtspVideo');
+            if (rtspVideo) {
+                rtspVideo.srcObject = null;
+                rtspVideo.style.display = 'none';
+            }
+
             // Limpa canvas
             const canvas = document.getElementById('overlayCanvas');
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        // --- CONTROLES DE FLUXO DE VÍDEO HÍBRIDO (WEBCAM / RTSP) ---
+        function toggleVideoSource(source) {
+            stopAllWebcams();
+            if (isRtspActive) {
+                stopRtspProcessingAction();
+            }
+
+            const webcamVideo = document.getElementById('webcam');
+            const overlayCanvas = document.getElementById('overlayCanvas');
+            const rtspVideo = document.getElementById('rtspVideo');
+            const webcamControls = document.getElementById('webcamControls');
+            const rtspControls = document.getElementById('rtspControls');
+
+            if (source === 'webcam') {
+                webcamVideo.style.display = 'block';
+                overlayCanvas.style.display = 'block';
+                rtspVideo.style.display = 'none';
+                webcamControls.style.display = 'flex';
+                rtspControls.style.display = 'none';
+            } else {
+                webcamVideo.style.display = 'none';
+                overlayCanvas.style.display = 'block'; // Mostra canvas em cima do RTSP
+                rtspVideo.style.display = 'block';
+                webcamControls.style.display = 'none';
+                rtspControls.style.display = 'flex';
+            }
+        }
+
+        async function toggleRtspProcessing() {
+            if (isRtspActive) {
+                await stopRtspProcessingAction();
+            } else {
+                await startRtspProcessingAction();
+            }
+        }
+
+        async function startRtspProcessingAction() {
+            const rtspUrl = document.getElementById('rtspUrlInput').value.trim();
+            if (!rtspUrl) {
+                showToast("Por favor, informe a URL do stream RTSP.");
+                return;
+            }
+
+            showToast("Conectando ao stream via WebRTC...");
+            try {
+                // 1. Registra a URL no go2rtc via backend
+                const regResponse = await fetch("/api/webrtc/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url: rtspUrl })
+                });
+
+                if (!regResponse.ok) {
+                    const err = await regResponse.json();
+                    showToast("Erro ao registrar stream: " + err.error);
+                    return;
+                }
+
+                // 2. Inicia o WebRTC player local
+                const rtspVideo = document.getElementById('rtspVideo');
+                rtspVideo.style.display = 'block';
+                await playWebRTCStream(rtspVideo, "live");
+
+                isRtspActive = true;
+                isScannerActive = true;
+
+                // 3. Ajusta o canvas de overlay
+                const canvas = document.getElementById('overlayCanvas');
+                rtspVideo.onloadedmetadata = () => {
+                    canvas.width = rtspVideo.videoWidth;
+                    canvas.height = rtspVideo.videoHeight;
+                };
+
+                // 4. Inicia o loop de captura e reconhecimento cliente-side
+                clearInterval(scannerInterval);
+                scannerInterval = setInterval(captureAndRecognize, 600);
+
+                showToast("Processamento WebRTC ativo!");
+                
+                const btn = document.getElementById('toggleRtsp');
+                btn.className = "btn btn-danger";
+                btn.innerHTML = "<span>⏹</span> Parar Processamento RTSP";
+            } catch (err) {
+                console.error(err);
+                showToast("Erro de rede ao conectar com RTSP.");
+            }
+        }
+
+        async function stopRtspProcessingAction() {
+            isScannerActive = false;
+            isRtspActive = false;
+            clearInterval(scannerInterval);
+            closeWebRTCConnection();
+
+            const rtspVideo = document.getElementById('rtspVideo');
+            if (rtspVideo) {
+                rtspVideo.srcObject = null;
+                rtspVideo.style.display = 'none';
+            }
+
+            const btn = document.getElementById('toggleRtsp');
+            if (btn) {
+                btn.className = "btn btn-primary";
+                btn.innerHTML = "<span>▶</span> Iniciar Processamento RTSP";
+            }
+
+            showToast("Processamento RTSP parado.");
+
+            document.getElementById("metric-count").innerText = "0";
+            document.getElementById("metric-latency").innerText = "0.00 ms";
+            document.getElementById("metric-detector").innerText = "-";
+            document.getElementById("detectionsList").innerHTML = `<div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">Processamento RTSP inativo.</div>`;
+
+            // Limpa canvas
+            const canvas = document.getElementById('overlayCanvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
         }
 
         // --- SCANNER REALTIME ---
@@ -752,9 +1146,23 @@
         async function captureAndRecognize() {
             if (!isScannerActive) return;
 
-            const video = document.getElementById("webcam");
+            let video = document.getElementById("webcam");
+            const sourceChoice = document.getElementById("videoSourceSelect").value;
+            if (sourceChoice === "rtsp") {
+                video = document.getElementById("rtspVideo");
+            }
+
             const canvas = document.getElementById("overlayCanvas");
             const ctx = canvas.getContext("2d");
+
+            if (!video || video.paused || video.ended || video.readyState < 2) {
+                return;
+            }
+
+            if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+            }
 
             // Cria canvas temporário em memória para extrair base64 do frame
             const tempCanvas = document.createElement("canvas");
@@ -894,14 +1302,158 @@
             previewWrapper.style.display = 'block';
         }
 
+        function startRegisterRTSP() {
+            resetRegisterForm();
+            const rtspWrapper = document.getElementById('registerRTSPWrapper');
+            const controlPanel = document.getElementById('registerRTSPControlPanel');
+
+            rtspWrapper.style.display = 'block';
+            controlPanel.style.display = 'block';
+            registerRTSPActive = true;
+            capturedFromRTSP = true;
+
+            // Preenche a URL do input com o valor do scanner se houver
+            const scannerUrl = document.getElementById('rtspUrlInput').value.trim();
+            if (scannerUrl) {
+                document.getElementById('regRtspUrlInput').value = scannerUrl;
+            }
+        }
+
+        async function connectRegisterRTSP() {
+            const rtspUrl = document.getElementById('regRtspUrlInput').value.trim();
+            if (!rtspUrl) {
+                showToast("Por favor, informe a URL do stream (RTSP/RTMP).");
+                return;
+            }
+
+            showToast("Conectando ao stream via WebRTC...");
+            try {
+                // 1. Registra a URL no go2rtc via backend sob o nome "register"
+                const regResponse = await fetch("/api/webrtc/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url: rtspUrl, name: "register" })
+                });
+
+                if (!regResponse.ok) {
+                    const err = await regResponse.json();
+                    showToast("Erro ao registrar stream: " + err.error);
+                    return;
+                }
+
+                showToast("Conectado! Negociando WebRTC...");
+                
+                // 2. Inicia o WebRTC player local no elemento registerRTSPVideo
+                const registerRTSPVideo = document.getElementById('registerRTSPVideo');
+                await playWebRTCStream(registerRTSPVideo, "register");
+                
+                // Sincroniza o input do scanner para conveniência
+                const scannerUrlInput = document.getElementById('rtspUrlInput');
+                if (scannerUrlInput) {
+                    scannerUrlInput.value = rtspUrl;
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Erro de rede ao conectar.");
+            }
+        }
+
+        async function capturePhotoFromRTSP() {
+            const video = document.getElementById('registerRTSPVideo');
+            if (!video || video.paused || video.ended || video.readyState < 2) {
+                showToast("Stream de vídeo não está pronto.");
+                return null;
+            }
+
+            showToast("Analisando e capturando frame do stream...");
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const base64Image = canvas.toDataURL("image/jpeg");
+            
+            try {
+                // Valida o frame enviando para o endpoint /recognize
+                const response = await fetch("/recognize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                        image_base64: base64Image, 
+                        detector: "auto",
+                        threshold: 0.68
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error("Erro ao validar face com o servidor.");
+                }
+
+                const data = await response.json();
+                
+                if (data.faces && data.faces.length > 0) {
+                    showToast(`Frame capturado! Detectados: ${data.faces.length} rosto(s).`);
+                } else {
+                    showToast("Aviso: Nenhum rosto foi detectado neste frame, mas salvando assim mesmo.");
+                }
+
+                // Converte para Blob e retorna via Promise
+                return new Promise((resolve) => {
+                    canvas.toBlob(async (blob) => {
+                        capturedBlob = blob;
+                        
+                        // Mostra o preview estático
+                        const previewWrapper = document.getElementById('registerPreviewWrapper');
+                        const previewImg = document.getElementById('registerPreviewImg');
+                        previewImg.src = URL.createObjectURL(capturedBlob);
+                        
+                        // Para o WebRTC de cadastro
+                        closeWebRTCConnection("register");
+                        if (video) {
+                            video.srcObject = null;
+                        }
+                        
+                        // Oculta o container de stream e exibe o preview
+                        document.getElementById('registerRTSPWrapper').style.display = 'none';
+                        document.getElementById('registerRTSPControlPanel').style.display = 'none';
+                        previewWrapper.style.display = 'block';
+                        
+                        // Define como falso para que o submit use o fluxo padrão de envio de arquivo
+                        capturedFromRTSP = false;
+                        resolve(blob);
+                    }, 'image/jpeg');
+                });
+
+            } catch (err) {
+                console.error(err);
+                showToast("Erro ao validar/capturar frame: " + err.message);
+                return null;
+            }
+        }
+
         function resetRegisterForm() {
             capturedBlob = null;
+            capturedFromRTSP = false;
+            registerRTSPActive = false;
+            
             if (registerStream) {
                 registerStream.getTracks().forEach(track => track.stop());
                 registerStream = null;
             }
+            
+            // Fecha conexões WebRTC
+            closeWebRTCConnection("register");
+            const registerRTSPVideo = document.getElementById('registerRTSPVideo');
+            if (registerRTSPVideo) {
+                registerRTSPVideo.srcObject = null;
+            }
+            
             document.getElementById('registerCameraWrapper').style.display = 'none';
             document.getElementById('registerControlPanel').style.display = 'none';
+            document.getElementById('registerRTSPWrapper').style.display = 'none';
+            document.getElementById('registerRTSPControlPanel').style.display = 'none';
             document.getElementById('registerPreviewWrapper').style.display = 'none';
             document.getElementById('registerPreviewImg').src = "";
             document.getElementById('regName').value = "";
@@ -913,6 +1465,10 @@
             if (!name) {
                 showToast("Por favor, digite o nome completo.");
                 return;
+            }
+            if (capturedFromRTSP) {
+                const blob = await capturePhotoFromRTSP();
+                if (!blob) return;
             }
             if (!capturedBlob) {
                 showToast("Por favor, tire uma foto ou faça upload de um arquivo.");
@@ -952,15 +1508,23 @@
                 tbody.innerHTML = "";
 
                 if (data.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-muted);">Nenhum histórico registrado.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">Nenhum histórico registrado.</td></tr>`;
                     return;
                 }
 
                 data.forEach(row => {
                     const namesStr = row.identified_names.join(", ") || "Nenhum";
+                    
+                    const imgHtml = row.image_path 
+                        ? `<a href="/history_images/${row.image_path.split('/').pop()}" target="_blank">
+                             <img src="/history_images/${row.image_path.split('/').pop()}" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-glass); cursor: pointer;" alt="Scan">
+                           </a>`
+                        : `<span style="color: var(--text-muted); font-size: 0.8rem;">Sem foto</span>`;
+                        
                     const tr = document.createElement("tr");
                     tr.innerHTML = `
                         <td>${row.timestamp}</td>
+                        <td>${imgHtml}</td>
                         <td>${row.faces_detected}</td>
                         <td>${namesStr}</td>
                         <td>${row.latency_ms.toFixed(1)} ms</td>
@@ -1186,6 +1750,53 @@
                 console.error(err);
                 showToast("Erro ao descartar.");
             }
+        }
+
+        async function discoverNetworkCameras(inputTargetId, selectElementId) {
+            const selectEl = document.getElementById(selectElementId);
+            showToast("Buscando câmeras ONVIF na rede...");
+            
+            try {
+                const response = await fetch("/api/discover");
+                if (!response.ok) throw new Error("Erro ao pesquisar a rede.");
+                const data = await response.json();
+                
+                if (data.cameras && data.cameras.length > 0) {
+                    showToast(`Busca concluída! ${data.cameras.length} câmera(s) encontrada(s).`);
+                    selectEl.innerHTML = `<option value="">📋 Selecione uma câmera encontrada...</option>`;
+                    data.cameras.forEach(cam => {
+                        const opt = document.createElement("option");
+                        opt.value = cam.ip;
+                        opt.innerText = `${cam.name} (${cam.ip}) - [${cam.hardware}]`;
+                        selectEl.appendChild(opt);
+                    });
+                    selectEl.style.display = "block";
+                } else {
+                    showToast("Nenhuma câmera ONVIF encontrada na rede.");
+                    selectEl.style.display = "none";
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Erro ao buscar câmeras na rede.");
+                selectEl.style.display = "none";
+            }
+        }
+
+        function selectDiscoveredCamera(ip, inputTargetId) {
+            if (!ip) return;
+            const inputEl = document.getElementById(inputTargetId);
+            const newUrl = `rtsp://[USUARIO]:[SENHA]@${ip}:554/stream1`;
+            
+            inputEl.value = newUrl;
+            
+            // Sincroniza com o input do outro tab
+            const otherInputId = (inputTargetId === 'regRtspUrlInput') ? 'rtspUrlInput' : 'regRtspUrlInput';
+            const otherInputEl = document.getElementById(otherInputId);
+            if (otherInputEl) {
+                otherInputEl.value = newUrl;
+            }
+            
+            showToast("URL preenchida com o padrão da Tapo (/stream1). Substitua [USUARIO] e [SENHA].");
         }
     </script>
 </body>

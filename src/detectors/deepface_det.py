@@ -15,11 +15,11 @@ class DeepFaceDetector(BaseDetector):
         except Exception as e:
             print(f"[RetinaFace] Erro ao verificar GPU no TensorFlow: {e}")
 
-    def detect(self, image_path: str) -> list[DetectionResult]:
+    def detect(self, image_path_or_arr) -> list[DetectionResult]:
         try:
             # extract_faces retorna uma lista de dicionários
             faces = DeepFace.extract_faces(
-                img_path=image_path,
+                img_path=image_path_or_arr,
                 detector_backend=self.detector_backend,
                 enforce_detection=False
             )

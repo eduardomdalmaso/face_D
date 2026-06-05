@@ -19,7 +19,8 @@ face_D/
 │   │   ├── deepface_det.py    # Detector RetinaFace via DeepFace
 │   │   ├── mediapipe_det.py   # Detector MediaPipe Face (Novo Tasks API)
 │   │   ├── opencv_yunet.py    # Detector OpenCV YuNet (Nativo)
-│   │   └── opencv_haar.py     # Detector clássico Haar Cascades
+│   │   ├── opencv_haar.py     # Detector clássico Haar Cascades
+│   │   └── yolo_det.py        # Detector de pessoas YOLOv8-nano (ONNX)
 │   ├── database.py            # Persistência SQLite e cálculo de similaridade
 │   ├── server.py              # API FastAPI e roteamento estático
 │   └── capture.py             # Captura de webcam de baixo nível (CLI/Headless)
@@ -46,14 +47,15 @@ O reconhecimento facial é feito calculando a **distância de cosseno** (`dist =
 
 ---
 
-## 3. O Pipeline Híbrido Web (Velocidade & Precisão)
+## 3. O Pipeline Híbrido Web Gated por Detecção de Pessoas (YOLOv8-nano + YuNet/RetinaFace)
 
-Para a interface web interativa do FastAPI, implementamos um pipeline híbrido otimizado:
-1. **Detecção Flexível (Selecionável):** O frame em base64 recebido da webcam do navegador é processado pelo detector selecionado pelo usuário no front-end:
-   *   **YuNet (⚡ Rápido / CPU):** Ideal para detecção em tempo real de frente (latência de ~16ms).
-   *   **RetinaFace (🎯 Acurácia / Perfil):** Ideal para detectar rostos em ângulos extremos (inclinação, lado/perfil, oclusão parcial), executado de forma robusta e precisa.
-2. **Extração de Assinatura Focal:** O fragmento correspondente ao rosto é cortado e enviado ao **DeepFace.represent** configurado com `detector_backend='skip'`. Ao ignorar a fase de detecção interna do DeepFace (já feita pelo detector escolhido), a extração do vetor do rosto é acelerada exponencialmente.
-3. **Reconhecimento:** O vetor é cruzado em milissegundos com o cache local de vetores em memória para identificar a pessoa.
+Para a interface web interativa do FastAPI, implementamos um pipeline hierárquico híbrido otimizado para evitar falsos positivos no fundo da imagem:
+1. **Detecção de Pessoas (YOLOv8):** O frame recebido é pré-processado (blob 640x640) e enviado ao modelo **YOLOv8-nano ONNX** via OpenCV DNN. O backend seleciona CUDA (GPU) automaticamente se disponível, ou CPU como fallback.
+2. **Gating por Região de Interesse (RoI):** Se nenhuma pessoa for detectada no frame, o pipeline de detecção facial é abortado imediatamente. Isso evita varreduras de falsos positivos em cenários vazios (como objetos estáticos, cadeiras, etc.).
+3. **Detecção Facial Localizada:** Para cada pessoa detectada, recortamos sua RoI correspondente com uma margem extra de 10%. Rodamos a detecção facial (YuNet ou RetinaFace) apenas dentro de cada crop humano.
+4. **Remapeamento de Coordenadas:** Transladamos as coordenadas da caixa delimitadora do rosto e de seus landmarks de volta para o plano coordenado do frame original de 2304x1296 (ou resolução nativa da câmera).
+5. **Extração de Assinatura Focal:** O fragmento correspondente ao rosto remapeado é cortado e enviado ao **DeepFace.represent** com `detector_backend='skip'`. Como o rosto já foi isolado, a geração do embedding via ArcFace ocorre em milissegundos.
+6. **Reconhecimento Híbrido:** O vetor gerado é classificado usando similaridade cosseno direta e predições probabilísticas do modelo SVM para determinar se a pessoa é cadastrada ou "Desconhecida".
 
 ---
 

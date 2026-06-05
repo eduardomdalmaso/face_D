@@ -1,4 +1,5 @@
 import os
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
 import time
 import base64
 import cv2
@@ -7,8 +8,9 @@ import json
 import uuid
 import shutil
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+import threading
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -19,6 +21,7 @@ from src.database import (
 )
 from src.detectors.opencv_yunet import OpenCVYuNetDetector
 from src.detectors.deepface_det import DeepFaceDetector
+from src.detectors.yolo_det import YOLOv8PersonDetector
 from deepface import DeepFace
 
 # Inicializações
@@ -28,8 +31,10 @@ init_db()
 # Diretórios necessários
 REGISTERED_DIR = "data/registered"
 PENDING_DIR = "data/pending_review"
+HISTORY_DIR = "data/history"
 os.makedirs(REGISTERED_DIR, exist_ok=True)
 os.makedirs(PENDING_DIR, exist_ok=True)
+os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs("data/test_images", exist_ok=True)
 
 # Habilita CORS
@@ -44,10 +49,12 @@ app.add_middleware(
 # Monta a pasta de fotos cadastradas como estática para servir os snapshots
 app.mount("/registered_images", StaticFiles(directory=REGISTERED_DIR), name="registered_images")
 app.mount("/pending_images", StaticFiles(directory=PENDING_DIR), name="pending_images")
+app.mount("/history_images", StaticFiles(directory=HISTORY_DIR), name="history_images")
 
 # Inicializa os detectores
 detector_yunet = OpenCVYuNetDetector(score_threshold=0.6)
 detector_retinaface = DeepFaceDetector(detector_backend='retinaface')
+detector_yolo = YOLOv8PersonDetector()
 
 # Cache de usuários cadastrados
 registered_users = get_all_users()
@@ -188,24 +195,49 @@ def process_recognition_frame(img: np.ndarray, detector_choice: str, threshold_v
     e filas de aprendizado ativo.
     """
     h, w, _ = img.shape
-    temp_img_path = f"data/temp_recon_proc_{int(time.time() * 1000)}.jpg"
-    cv2.imwrite(temp_img_path, img)
     
-    # 1. Detectores em cascata
+    # 1. Detectores em cascata precedidos por detecção de pessoas (YOLOv8)
+    people = detector_yolo.detect(img)
+    
+    detections = []
     detector_used = detector_choice
-    if detector_choice == "retinaface":
-        detections = detector_retinaface.detect(temp_img_path)
-    elif detector_choice == "yunet":
-        detections = detector_yunet.detect(temp_img_path)
-    else: # auto
-        detections = detector_yunet.detect(temp_img_path)
-        detector_used = "yunet"
-        if len(detections) == 0:
-            detections = detector_retinaface.detect(temp_img_path)
-            detector_used = "retinaface"
+    
+    for person in people:
+        # Adiciona margem de 10% para garantir que a cabeça/rosto não sejam cortados
+        margin_x = int(person.w * 0.1)
+        margin_y = int(person.h * 0.1)
+        
+        x1 = max(0, person.x - margin_x)
+        y1 = max(0, person.y - margin_y)
+        x2 = min(w, person.x + person.w + margin_x)
+        y2 = min(h, person.y + person.h + margin_y)
+        
+        person_crop = img[y1:y2, x1:x2]
+        if person_crop.size == 0:
+            continue
             
-    if os.path.exists(temp_img_path):
-        os.remove(temp_img_path)
+        person_detections = []
+        if detector_choice == "retinaface":
+            person_detections = detector_retinaface.detect(person_crop)
+            detector_used = "retinaface"
+        elif detector_choice == "yunet":
+            person_detections = detector_yunet.detect(person_crop)
+            detector_used = "yunet"
+        else: # auto
+            person_detections = detector_yunet.detect(person_crop)
+            detector_used = "yunet"
+            if len(person_detections) == 0:
+                person_detections = detector_retinaface.detect(person_crop)
+                detector_used = "retinaface"
+                
+        # Remapeia coordenadas de detecção e landmarks da face para o frame original
+        for face_det in person_detections:
+            face_det.x += x1
+            face_det.y += y1
+            if face_det.landmarks:
+                for lm_name, lm_coord in face_det.landmarks.items():
+                    face_det.landmarks[lm_name] = [lm_coord[0] + x1, lm_coord[1] + y1]
+            detections.append(face_det)
         
     # 2. Extrair embeddings de todos os rostos detectados
     extracted_faces = []
@@ -359,8 +391,8 @@ def process_recognition_frame(img: np.ndarray, detector_choice: str, threshold_v
                         cache_needs_refresh = True
                         
             # 3.5. Aprendizado Ativo (Active Learning)
-            # Se a similaridade é limítrofe (distância entre 0.50 e 0.70), enviar para revisão do usuário
-            if 0.50 <= min_dist_any <= 0.70:
+            # Se a similaridade é limítrofe (distância entre 0.50 e 0.70) e a confiança da detecção é alta (>= 0.80) para evitar falsos positivos
+            if 0.50 <= min_dist_any <= 0.70 and det.confidence >= 0.80:
                 suggested_name = svm_name if svm_name else nearest_user_name
                 conf_val = svm_prob if svm_name else (1.0 - min_dist_any)
                 
@@ -412,7 +444,25 @@ async def recognize_faces_in_frame(payload: RecognizeRequest):
         
         # Salva no histórico se houve alguma detecção
         if len(detected_names) > 0:
-            add_history_entry(len(detected_names), detected_names, latency_ms)
+            annotated_img = img.copy()
+            for face in identified_faces:
+                box = face["box"]
+                name = face["name"]
+                conf = face["confidence"]
+                x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+                is_unknown = (name == "Desconhecido")
+                color = (0, 0, 255) if is_unknown else (0, 255, 135)
+                cv2.rectangle(annotated_img, (x, y), (x + w, y + h), color, 2)
+                label = f"{name} ({(conf * 100):.0f}%)" if not is_unknown else "Desconhecido"
+                (w_t, h_t), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+                cv2.rectangle(annotated_img, (x, y - h_t - 8), (x + w_t, y), color, -1)
+                cv2.putText(annotated_img, label, (x, y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, 
+                            (0, 0, 0) if not is_unknown else (255, 255, 255), 1, cv2.LINE_AA)
+            
+            history_filename = f"hist_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}.jpg"
+            history_path = os.path.join(HISTORY_DIR, history_filename)
+            cv2.imwrite(history_path, annotated_img)
+            add_history_entry(len(detected_names), detected_names, latency_ms, history_path)
             
         return {
             "faces": identified_faces,
@@ -468,7 +518,25 @@ async def websocket_stream(websocket: WebSocket):
             latency_ms = (time.time() - start_time) * 1000
             
             if len(detected_names) > 0:
-                add_history_entry(len(detected_names), detected_names, latency_ms)
+                annotated_img = img.copy()
+                for face in identified_faces:
+                    box = face["box"]
+                    name = face["name"]
+                    conf = face["confidence"]
+                    x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+                    is_unknown = (name == "Desconhecido")
+                    color = (0, 0, 255) if is_unknown else (0, 255, 135)
+                    cv2.rectangle(annotated_img, (x, y), (x + w, y + h), color, 2)
+                    label = f"{name} ({(conf * 100):.0f}%)" if not is_unknown else "Desconhecido"
+                    (w_t, h_t), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+                    cv2.rectangle(annotated_img, (x, y - h_t - 8), (x + w_t, y), color, -1)
+                    cv2.putText(annotated_img, label, (x, y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, 
+                                (0, 0, 0) if not is_unknown else (255, 255, 255), 1, cv2.LINE_AA)
+                
+                history_filename = f"hist_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}.jpg"
+                history_path = os.path.join(HISTORY_DIR, history_filename)
+                cv2.imwrite(history_path, annotated_img)
+                add_history_entry(len(detected_names), detected_names, latency_ms, history_path)
                 
             await websocket.send_json({
                 "faces": identified_faces,
@@ -593,3 +661,328 @@ async def reject_review(review_id: str):
             
     delete_pending_review(review_id)
     return {"status": "success", "message": "Revisão deletada com sucesso."}
+
+# --- RTSP STREAMING INTEGRATION ---
+
+class RTSPProcessor:
+    def __init__(self):
+        self.url = "rtsp://localhost:8554/live"
+        self.cap = None
+        self.running = False
+        self.latest_frame = None
+        self.annotated_frame = None
+        self.lock = threading.Lock()
+        self.reader_thread = None
+        self.processor_thread = None
+        self.detector = "auto"
+        self.threshold = 0.68
+        self.run_recognition = True
+        self.latency_ms = 0.0
+        self.faces_count = 0
+        self.active_detector = "-"
+        self.detected_names = []
+
+    def start(self, url=None, detector="auto", threshold=0.68, run_recognition=True):
+        with self.lock:
+            if url:
+                self.url = url
+            self.detector = detector
+            self.threshold = threshold
+            self.run_recognition = run_recognition
+            
+            if self.running:
+                # Se já estiver rodando, apenas garante que as flags estejam atualizadas
+                return True
+                
+            self.running = True
+            
+            # Inicia thread de leitura em segundo plano
+            self.reader_thread = threading.Thread(target=self._reader, daemon=True)
+            self.reader_thread.start()
+            
+            # Inicia thread de processamento em segundo plano
+            self.processor_thread = threading.Thread(target=self._processor, daemon=True)
+            self.processor_thread.start()
+            
+            return True
+
+    def stop(self):
+        cap_to_release = None
+        with self.lock:
+            self.running = False
+            if self.cap:
+                cap_to_release = self.cap
+                self.cap = None
+            self.latest_frame = None
+            self.annotated_frame = None
+            self.detected_names = []
+            self.faces_count = 0
+            self.latency_ms = 0.0
+            self.active_detector = "-"
+
+        # Libera o VideoCapture fora do lock para evitar deadlocks
+        if cap_to_release:
+            try:
+                print("[RTSP] Parando stream e liberando recursos de rede...")
+                cap_to_release.release()
+            except Exception as e:
+                print(f"[RTSP] Erro ao liberar VideoCapture no stop: {e}")
+
+    def _reader(self):
+        print(f"[RTSP Reader] Iniciando loop de captura: {self.url}")
+        
+        consecutive_failures = 0
+        while self.running:
+            cap = None
+            with self.lock:
+                cap = self.cap
+                
+            if cap is None:
+                # Se cap for None, tenta abrir fora do lock para não bloquear a API
+                print(f"[RTSP Reader] Abrindo conexão com o stream: {self.url}")
+                new_cap = cv2.VideoCapture(self.url)
+                new_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                
+                with self.lock:
+                    if not self.running:
+                        new_cap.release()
+                        break
+                    self.cap = new_cap
+                    cap = new_cap
+            
+            ret, frame = cap.read()
+            if not ret:
+                consecutive_failures += 1
+                if consecutive_failures > 30:
+                    print(f"[RTSP Reader] Falha de conexão persistente. Fechando VideoCapture para tentar reconexão...")
+                    with self.lock:
+                        if self.cap == cap:
+                            self.cap = None
+                    # Libera fora do lock
+                    cap.release()
+                    time.sleep(2)
+                    consecutive_failures = 0
+                else:
+                    time.sleep(0.05)
+                continue
+                
+            consecutive_failures = 0
+            with self.lock:
+                self.latest_frame = frame.copy()
+                # Se o reconhecimento estiver desativado, o annotated_frame é o próprio frame cru
+                if not self.run_recognition:
+                    self.annotated_frame = frame.copy()
+                    
+            time.sleep(0.01)
+            
+        # Garante liberação fora do lock ao sair do loop
+        cap_to_release = None
+        with self.lock:
+            if self.cap:
+                cap_to_release = self.cap
+                self.cap = None
+        if cap_to_release:
+            cap_to_release.release()
+        print(f"[RTSP Reader] Loop de leitura encerrado.")
+
+    def _processor(self):
+        print(f"[RTSP Processor] Iniciando thread de processamento (Reconhecimento: {self.run_recognition}).")
+        last_processed_time = 0.0
+        
+        while self.running:
+            if not self.run_recognition:
+                time.sleep(0.1)
+                continue
+                
+            # Limita a taxa de processamento no CPU para no máximo 10 FPS
+            now = time.time()
+            if now - last_processed_time < 0.1:
+                time.sleep(0.02)
+                continue
+                
+            frame = None
+            with self.lock:
+                if self.latest_frame is not None:
+                    frame = self.latest_frame.copy()
+                    
+            if frame is None:
+                time.sleep(0.05)
+                continue
+                
+            last_processed_time = now
+            start_time = time.time()
+            try:
+                # Processa detecção e reconhecimento facial usando o pipeline principal
+                identified_faces, detected_names, detector_used = process_recognition_frame(
+                    img=frame,
+                    detector_choice=self.detector,
+                    threshold_val=self.threshold,
+                    extract_attrs=False
+                )
+                
+                annotated = frame.copy()
+                for face in identified_faces:
+                    box = face["box"]
+                    name = face["name"]
+                    conf = face["confidence"]
+                    landmarks = face["landmarks"]
+                    
+                    x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+                    is_unknown = (name == "Desconhecido")
+                    color = (0, 0, 255) if is_unknown else (0, 255, 135)
+                    
+                    cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 2)
+                    if landmarks:
+                        for lm in landmarks:
+                            cv2.circle(annotated, (int(lm[0]), int(lm[1])), 3, (0, 255, 255), -1)
+                            
+                    label = f"{name} ({(conf * 100):.0f}%)" if not is_unknown else "Desconhecido"
+                    (w_t, h_t), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+                    cv2.rectangle(annotated, (x, y - h_t - 8), (x + w_t, y), color, -1)
+                    cv2.putText(annotated, label, (x, y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, 
+                                (0, 0, 0) if not is_unknown else (255, 255, 255), 1, cv2.LINE_AA)
+                                
+                latency = (time.time() - start_time) * 1000
+                if len(detected_names) > 0:
+                    add_history_entry(len(detected_names), detected_names, latency)
+                    
+                with self.lock:
+                    self.annotated_frame = annotated
+                    self.latency_ms = latency
+                    self.faces_count = len(identified_faces)
+                    self.active_detector = detector_used
+                    self.detected_names = detected_names
+                    
+            except Exception as e:
+                print(f"[RTSP Process] Falha ao analisar frame: {e}")
+                # Em caso de erro de processamento, apenas joga o frame cru
+                with self.lock:
+                    self.annotated_frame = frame.copy()
+                    
+        print(f"[RTSP Processor] Thread de processamento finalizada.")
+
+# --- WEBRTC PROXY ENDPOINTS FOR GO2RTC ---
+import requests
+import base64
+
+@app.post("/api/webrtc/register")
+def register_webrtc_stream(payload: dict):
+    """Registra uma câmera RTSP/RTMP no go2rtc dinamicamente."""
+    url = payload.get("url")
+    name = payload.get("name", "live")
+    if not url:
+        raise HTTPException(status_code=400, detail="URL do stream não fornecida.")
+        
+    go2rtc_url = f"http://localhost:1984/api/streams?name={name}&src={url}"
+    try:
+        response = requests.put(go2rtc_url, timeout=5)
+        if response.status_code in [200, 201]:
+            return {"status": "success", "message": f"Stream '{name}' registrado no go2rtc com sucesso!"}
+        else:
+            return JSONResponse(status_code=500, content={"error": f"Erro no go2rtc: {response.text}"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Não foi possível conectar ao go2rtc: {str(e)}"})
+
+@app.post("/api/webrtc/negotiate")
+def negotiate_webrtc(payload: dict):
+    """Realiza a negociação SDP (Offer/Answer) com o go2rtc."""
+    sdp = payload.get("sdp")
+    name = payload.get("name", "live")
+    if not sdp:
+        raise HTTPException(status_code=400, detail="SDP Offer não fornecido.")
+        
+    go2rtc_url = f"http://localhost:1984/api/webrtc?src={name}"
+    try:
+        response = requests.post(
+            go2rtc_url,
+            headers={"Content-Type": "application/sdp"},
+            data=sdp,
+            timeout=5
+        )
+        if response.status_code in [200, 201]:
+            return {"sdp": response.text}
+        else:
+            return JSONResponse(status_code=500, content={"error": f"Erro na negociação com go2rtc: {response.text}"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Falha de rede ao conectar ao go2rtc: {str(e)}"})
+
+@app.get("/api/discover")
+async def discover_onvif_cameras():
+    """Busca câmeras ONVIF na rede local via multicast UDP (WS-Discovery)."""
+    import socket
+    import re
+    
+    message_id = f"uuid:{uuid.uuid4()}"
+    probe_msg = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<Envelope xmlns:tds="http://www.onvif.org/ver10/device/wsdl" xmlns="http://www.w3.org/2003/05/soap-envelope" xmlns:dn="http://www.onvif.org/ver10/network/wsdl">'
+          '<Header>'
+            f'<MessageID xmlns="http://schemas.xmlsoap.org/ws/2004/08/addressing">{message_id}</MessageID>'
+            '<To xmlns="http://schemas.xmlsoap.org/ws/2004/08/addressing">urn:schemas-xmlsoap-org:ws:2004:08:addressing</To>'
+            '<Action xmlns="http://schemas.xmlsoap.org/ws/2004/08/addressing">http://schemas.xmlsoap.org/ws/2004/08/dmt/Probe</Action>'
+          '</Header>'
+          '<Body>'
+            '<Probe xmlns="http://schemas.xmlsoap.org/ws/2004/08/discovery">'
+              '<Types>dn:NetworkVideoTransmitter</Types>'
+            '</Probe>'
+          '</Body>'
+        '</Envelope>'
+    )
+
+    multicast_group = "239.255.255.250"
+    port = 3702
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.settimeout(1.5)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+
+    cameras = []
+    seen_ips = set()
+    try:
+        sock.sendto(probe_msg.encode('utf-8'), (multicast_group, port))
+        
+        start_time = time.time()
+        while time.time() - start_time < 2.0:
+            try:
+                data, addr = sock.recvfrom(65507)
+                ip = addr[0]
+                if ip in seen_ips:
+                    continue
+                seen_ips.add(ip)
+                
+                response = data.decode('utf-8', errors='ignore')
+                xaddrs = re.findall(r'<[^:>]*:?XAddrs>([^<]+)</[^:>]*:?XAddrs>', response)
+                scopes = re.findall(r'<[^:>]*:?Scopes>([^<]+)</[^:>]*:?Scopes>', response)
+                
+                scopes_parsed = {}
+                name = "Câmera Genérica"
+                hardware = "ONVIF"
+                
+                if scopes:
+                    for scope in scopes[0].split():
+                        parts = scope.split('/')
+                        if len(parts) > 3:
+                            key = parts[-2]
+                            val = parts[-1]
+                            scopes_parsed[key] = val
+                            if key == "name":
+                                name = re.sub(r'%20', ' ', val)
+                            elif key == "hardware":
+                                hardware = re.sub(r'%20', ' ', val)
+                
+                cameras.append({
+                    "ip": ip,
+                    "name": name,
+                    "hardware": hardware,
+                    "xaddrs": xaddrs[0] if xaddrs else "",
+                    "scopes": scopes_parsed
+                })
+            except socket.timeout:
+                break
+    except Exception as e:
+        print(f"[ONVIF Discovery] Erro ao buscar: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        sock.close()
+        
+    return {"status": "success", "cameras": cameras}

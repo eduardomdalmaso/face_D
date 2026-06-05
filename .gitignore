@@ -36,8 +36,10 @@ data/face_recognition.db
 data/registered/*
 data/pending_review/*
 data/test_images/*
+data/history/*
 !data/registered/.gitkeep
 !data/pending_review/.gitkeep
 !data/test_images/.gitkeep
+!data/history/.gitkeep
 
 benchmark_output.txt

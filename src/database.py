@@ -176,9 +176,17 @@ def init_db():
             timestamp TEXT NOT NULL,
             faces_detected INTEGER NOT NULL,
             identified_names TEXT NOT NULL,
-            latency_ms REAL NOT NULL
+            latency_ms REAL NOT NULL,
+            image_path TEXT
         )
         """)
+        
+        # Migração: adiciona a coluna image_path na tabela history se não existir (para compatibilidade)
+        cursor.execute("PRAGMA table_info(history)")
+        history_cols = [col["name"] for col in cursor.fetchall()]
+        if "image_path" not in history_cols:
+            cursor.execute("ALTER TABLE history ADD COLUMN image_path TEXT")
+            conn.commit()
         
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS pending_reviews (
@@ -362,7 +370,7 @@ def delete_user(name: str):
         conn.close()
         return True
 
-def add_history_entry(faces_detected: int, identified_names: list[str], latency_ms: float):
+def add_history_entry(faces_detected: int, identified_names: list[str], latency_ms: float, image_path: str = None):
     if DB_TYPE == "qdrant":
         try:
             entry_id = str(uuid.uuid4())
@@ -377,7 +385,8 @@ def add_history_entry(faces_detected: int, identified_names: list[str], latency_
                             "timestamp": timestamp,
                             "faces_detected": faces_detected,
                             "identified_names": identified_names,
-                            "latency_ms": latency_ms
+                            "latency_ms": latency_ms,
+                            "image_path": image_path
                         }
                     )
                 ]
@@ -393,9 +402,9 @@ def add_history_entry(faces_detected: int, identified_names: list[str], latency_
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         names_str = json.dumps(identified_names)
         cursor.execute("""
-        INSERT INTO history (timestamp, faces_detected, identified_names, latency_ms)
-        VALUES (?, ?, ?, ?)
-        """, (timestamp, faces_detected, names_str, latency_ms))
+        INSERT INTO history (timestamp, faces_detected, identified_names, latency_ms, image_path)
+        VALUES (?, ?, ?, ?, ?)
+        """, (timestamp, faces_detected, names_str, latency_ms, image_path))
         conn.commit()
         conn.close()
         return True
@@ -416,7 +425,8 @@ def get_history(limit: int = 50):
                     "timestamp": payload.get("timestamp"),
                     "faces_detected": payload.get("faces_detected"),
                     "identified_names": payload.get("identified_names", []),
-                    "latency_ms": payload.get("latency_ms", 0.0)
+                    "latency_ms": payload.get("latency_ms", 0.0),
+                    "image_path": payload.get("image_path")
                 })
             history_entries.sort(key=lambda x: x["timestamp"], reverse=True)
             return history_entries
@@ -427,7 +437,7 @@ def get_history(limit: int = 50):
         # SQLite
         conn = get_sqlite_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, timestamp, faces_detected, identified_names, latency_ms FROM history ORDER BY id DESC LIMIT ?", (limit,))
+        cursor.execute("SELECT id, timestamp, faces_detected, identified_names, latency_ms, image_path FROM history ORDER BY id DESC LIMIT ?", (limit,))
         rows = cursor.fetchall()
         history_entries = []
         for row in rows:
@@ -436,7 +446,8 @@ def get_history(limit: int = 50):
                 "timestamp": row["timestamp"],
                 "faces_detected": row["faces_detected"],
                 "identified_names": json.loads(row["identified_names"]),
-                "latency_ms": row["latency_ms"]
+                "latency_ms": row["latency_ms"],
+                "image_path": row["image_path"]
             })
         conn.close()
         return history_entries

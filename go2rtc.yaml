@@ -1,0 +1,27 @@
+# go2rtc configuration file
+# Configurado para utilizar aceleração de hardware (NVIDIA GPU via NVENC/CUDA) para codificação/decodificação
+
+api:
+  listen: ":1984"
+
+rtsp:
+  listen: ":8554"
+
+webrtc:
+  listen: ":8889"
+
+# Declaramos o stream 'live' como uma lista vazia.
+# Isso permite que publicações externas (FFmpeg/OpenCV push) registrem o feed dinamicamente,
+# sem que o go2rtc tente fazer o loop back recursivo de leitura.
+streams:
+  live:
+    - rtsp://eduardomdalmaso:b,TGY6505t@10.0.0.64:554/stream1
+  register:
+    - rtsp://eduardomdalmaso:b,TGY6505t@10.0.0.64:554/stream1
+
+# Configurações do FFmpeg para otimização de transcoder utilizando a GPU Nvidia RTX 5090
+ffmpeg:
+  bin: ffmpeg
+  # Transcodificador de H.264 e H.265 via hardware NVIDIA nvenc
+  h264: "-c:v h264_nvenc -preset p4 -tune ll -b:v 2000k"
+  h265: "-c:v hevc_nvenc -preset p4 -tune ll -b:v 2000k"

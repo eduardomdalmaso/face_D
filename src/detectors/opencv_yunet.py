@@ -51,9 +51,13 @@ class OpenCVYuNetDetector(BaseDetector):
             urllib.request.urlretrieve(url, self.model_path)
             print("[YuNet] Download concluído com sucesso!")
 
-    def detect(self, image_path: str) -> list[DetectionResult]:
+    def detect(self, image_path_or_arr) -> list[DetectionResult]:
         try:
-            img = cv2.imread(image_path)
+            if isinstance(image_path_or_arr, str):
+                img = cv2.imread(image_path_or_arr)
+            else:
+                img = image_path_or_arr
+
             if img is None:
                 return []
             
